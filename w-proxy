@@ -1,0 +1,92 @@
+#!/usr/bin/env python3
+#
+# Copyright (C) 2023 Askar Almatov
+#
+# This program is free software: you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or
+# (at your option) any later version.
+#
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program.  If not, see <http://www.gnu.org/licenses/>.
+
+"""Proxy server for ports 80, 443 based on iptables"""
+
+VERSION = "0.1"
+DEFAULT_WEB_IFACE = "eth0"
+DEFAULT_CLIENT_IP = "217.15.178.0"
+
+import getopt, ipaddress, netifaces, os, shlex, subprocess, sys
+
+opts, args = getopt.getopt(sys.argv[1:], "c:hv", ["client_ip=", "help", "version"])
+prog_name = os.path.basename(__file__)
+client_ip = DEFAULT_CLIENT_IP
+
+for o, a in opts:
+    if o in ("-c", "--client_ip"):
+        client_ip = a
+    elif o in ("-h", "--help"):
+        print(
+            prog_name + " establishes proxy server for ports 80, 443\n"
+            "Usage: " + prog_name + " [options] [WEB_IP]\n"
+            "\tWEB_IP\t\tWeb site IP address\n"
+            "\t-c --client_ip\tClient IP address or network\n"
+            "\t-h --help\tPrint help message\n"
+            "\t-v --version\tPrint version information\n"
+            )
+        sys.exit()
+    elif o in ("-v", "--version"):
+        print(prog_name + " version " + VERSION)
+        sys.exit()
+
+web_iface = DEFAULT_WEB_IFACE
+client_iface = subprocess.getoutput("ip route get " + client_ip).split()[4]
+
+if len(args) > 0:
+    web_ip = args[0]
+    web_iface = subprocess.getoutput("ip route get " + web_ip).split()[4]
+    ip = str(netifaces.ifaddresses(web_iface)[netifaces.AF_INET][0]['addr'])
+elif netifaces.AF_INET not in netifaces.ifaddresses(web_iface):
+    print("ERROR: interface " + web_iface + " has no IP addresses", file=sys.stderr)
+    sys.exit()
+else:
+    ip = str(netifaces.ifaddresses(web_iface)[netifaces.AF_INET][0]['addr'])
+    if subprocess.getoutput("ip route get 1.1.1.1").split()[4] == web_iface:
+        web_ip = subprocess.getoutput("ip route get 1.1.1.1").split()[2]
+    else:
+        mask = str(netifaces.ifaddresses(web_iface)[netifaces.AF_INET][0]['netmask'])
+        web_ip = str(ipaddress.IPv4Interface(ip+'/'+mask).network[1])
+
+subprocess.run(shlex.split("iptables -t nat -N WPROXY_PREROUTING"), stderr=subprocess.DEVNULL)
+subprocess.run(shlex.split("iptables -t nat -N WPROXY_POSTROUTING"), stderr=subprocess.DEVNULL)
+
+rules = [
+        "-F FORWARD",
+        "-A FORWARD -i " + client_iface + " -o " + web_iface + " -p tcp -m tcp --dport 80 --tcp-flags FIN,SYN,RST,ACK SYN -m conntrack --ctstate NEW -j ACCEPT",
+        "-A FORWARD -i " + client_iface + " -o " + web_iface + " -p tcp -m tcp --dport 443 --tcp-flags FIN,SYN,RST,ACK SYN -m conntrack --ctstate NEW -j ACCEPT",
+        "-A FORWARD -i " + client_iface + " -o " + web_iface + " -m conntrack --ctstate RELATED,ESTABLISHED -j ACCEPT",
+        "-A FORWARD -i " + web_iface + " -o " + client_iface + " -m conntrack --ctstate RELATED,ESTABLISHED -j ACCEPT",
+        "-t nat -F PREROUTING",
+        "-t nat -A PREROUTING -j WPROXY_PREROUTING",
+        "-t nat -F POSTROUTING",
+        "-t nat -A POSTROUTING -j WPROXY_POSTROUTING",
+        "-t nat -F WPROXY_PREROUTING",
+        "-t nat -A WPROXY_PREROUTING -i " + client_iface + " -p tcp -m tcp --dport 80 -j DNAT --to-destination " + web_ip,
+        "-t nat -A WPROXY_PREROUTING -i " + client_iface + " -p tcp -m tcp --dport 443 -j DNAT --to-destination " + web_ip,
+        "-t nat -A WPROXY_PREROUTING -j RETURN",
+        "-t nat -F WPROXY_POSTROUTING",
+        "-t nat -A WPROXY_POSTROUTING -d " + web_ip + "/32 -o " + web_iface + " -p tcp -m tcp --dport 80 -j SNAT --to-source " + ip,
+        "-t nat -A WPROXY_POSTROUTING -d " + web_ip + "/32 -o " + web_iface + " -p tcp -m tcp --dport 443 -j SNAT --to-source " + ip,
+        "-t nat -A WPROXY_POSTROUTING -j RETURN",
+    ]
+
+for rule in rules:
+    cmd = "iptables " + rule
+    print(cmd)
+    subprocess.run(shlex.split(cmd))
+
