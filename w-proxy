@@ -33,8 +33,8 @@ for o, a in opts:
     elif o in ("-h", "--help"):
         print(
             prog_name + " establishes proxy server for ports 80, 443\n"
-            "Usage: " + prog_name + " [options] [WEB_IP]\n"
-            "\tWEB_IP\t\tWeb site IP address\n"
+            "Usage: " + prog_name + " [options] [IP]\n"
+            "\tIP\t\tWeb site IP address\n"
             "\t-c --client_ip\tClient IP address or network\n"
             "\t-h --help\tPrint help message\n"
             "\t-v --version\tPrint version information\n"
