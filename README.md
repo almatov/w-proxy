@@ -32,4 +32,4 @@ Print help message
 
 Some web servers checks hostname in the HTTP request, i.e. TP–Link routers. To access these web servers you should add record to the client's /etc/hosts then browse required hostname
 
-	<w-proxy host IP>	tplinkwifi.net
+	<proxy IP>	tplinkwifi.net
