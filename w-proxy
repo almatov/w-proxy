@@ -19,7 +19,7 @@
 
 VERSION = "0.1"
 DEFAULT_WEB_IFACE = "eth0"
-DEFAULT_CLIENT_IP = "217.15.178.0"
+DEFAULT_CLIENT_IP = "217.15.178.2"
 
 import getopt, ipaddress, netifaces, os, shlex, subprocess, sys
 
