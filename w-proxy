@@ -33,7 +33,7 @@ for o, a in opts:
     elif o in ("-h", "--help"):
         print(
             prog_name + " establishes proxy server for ports 80, 443\n"
-            "Usage: " + prog_name + " [options] [IP]\n"
+            "Usage: " + prog_name + " [options] [<IP>]\n"
             "\tIP\t\tWeb site IP address\n"
             "\t-c --client_ip\tClient IP address or network\n"
             "\t-h --help\tPrint help message\n"
@@ -49,15 +49,20 @@ client_iface = subprocess.getoutput("ip route get " + client_ip).split()[4]
 
 if len(args) > 0:
     web_ip = args[0]
-    web_iface = subprocess.getoutput("ip route get " + web_ip).split()[4]
+    web_route = subprocess.getoutput("ip route get " + web_ip)
+    if web_route.split()[1] == "dev":
+        web_iface = web_route.split()[2]
+    else:
+        web_iface = web_route.split()[4]
     ip = str(netifaces.ifaddresses(web_iface)[netifaces.AF_INET][0]['addr'])
 elif netifaces.AF_INET not in netifaces.ifaddresses(web_iface):
     print("ERROR: interface " + web_iface + " has no IP addresses", file=sys.stderr)
     sys.exit()
 else:
     ip = str(netifaces.ifaddresses(web_iface)[netifaces.AF_INET][0]['addr'])
-    if subprocess.getoutput("ip route get 1.1.1.1").split()[4] == web_iface:
-        web_ip = subprocess.getoutput("ip route get 1.1.1.1").split()[2]
+    default_route = subprocess.getoutput("ip route get 1.1.1.1")
+    if default_route.split()[4] == web_iface:
+        web_ip = default_route.split()[2]
     else:
         mask = str(netifaces.ifaddresses(web_iface)[netifaces.AF_INET][0]['netmask'])
         web_ip = str(ipaddress.IPv4Interface(ip+'/'+mask).network[1])
